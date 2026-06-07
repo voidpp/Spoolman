@@ -1,7 +1,14 @@
 """Main entrypoint to the server."""
 
 import logging
+import warnings
+
+# Suppress deprecation warnings from third-party libraries we don't control
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="authlib")
+warnings.filterwarnings("ignore", message="authlib.jose module is deprecated")
+warnings.filterwarnings("ignore", message="datetime.datetime.utcnow\\(\\) is deprecated")
 import subprocess
+from contextlib import AsyncExitStack, asynccontextmanager
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
@@ -14,7 +21,7 @@ from prometheus_client import generate_latest
 from scheduler.asyncio.scheduler import Scheduler
 
 from spoolman import env, externaldb
-from spoolman.api.v1.router import app as v1_app
+from spoolman.api.v1.router import app as v1_app, _mcp_asgi
 from spoolman.client import SinglePageApplication
 from spoolman.database import database
 from spoolman.prometheus.metrics import registry
@@ -47,14 +54,53 @@ if access_handlers:
 logger = logging.getLogger(__name__)
 
 
+# FORK: multi-tenancy — lifespan replaces @on_event to wire in MCP session manager
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Run the service's startup/shutdown sequence."""
+    env.check_write_permissions()
+    add_file_logging()
+    logger.info("Starting Spoolman v%s (commit: %s) (built: %s)",
+                application.version, env.get_commit_hash(), env.get_build_date())
+    logger.info("Using data directory: %s", env.get_data_dir().resolve())
+    logger.info("Using logs directory: %s", env.get_logs_dir().resolve())
+    logger.info("Using backups directory: %s", env.get_backups_dir().resolve())
+    logger.info("Setting up database...")
+    database.setup_db(database.get_connection_url())
+    logger.info("Performing migrations...")
+    project_root = Path(__file__).parent.parent
+    venv_bin = project_root / ".venv" / "bin"
+    alembic_bin = venv_bin / "alembic" if (venv_bin / "alembic").exists() else "alembic"
+    subprocess.run([str(alembic_bin), "upgrade", "head"], check=True, cwd=project_root)  # noqa: ASYNC221, S607
+    schedule = Scheduler()
+    database.schedule_tasks(schedule)
+    externaldb.schedule_tasks(schedule)
+    logger.info("Startup complete.")
+    if env.is_docker() and not env.is_data_dir_mounted():
+        logger.warning("!!!! WARNING !!!!")
+        logger.warning("The data directory is not mounted.")
+        logger.warning('Spoolman stores its database in the container directory "%s". '
+                       "If this directory isn't mounted to the host OS, the database will be lost when the container is stopped.",
+                       env.get_data_dir())
+        logger.warning("Please carefully read the docker part of the README.md file, "
+                       "and ensure your docker-compose file matches the example.")
+        logger.warning("!!!! WARNING !!!!")
+    # FORK: multi-tenancy — initialize FastMCP's session manager via its lifespan
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(_mcp_asgi.lifespan(_mcp_asgi))
+        yield
+
+
 # Setup FastAPI
 app = FastAPI(
     debug=env.is_debug_mode(),
     title="Spoolman",
     version=env.get_version(),
+    lifespan=lifespan,  # FORK: multi-tenancy
 )
 app.add_middleware(GZipMiddleware)
 app.mount(env.get_base_path() + "/api/v1", v1_app)
+
 
 
 # WA for prometheus /metrics bind with SinglePageApp at root
@@ -147,58 +193,6 @@ def add_file_logging() -> None:
         logging.getLogger("uvicorn.access").addHandler(file_handler)
 
 
-@app.on_event("startup")
-async def startup() -> None:
-    """Run the service's startup sequence."""
-    # Check that the data directory is writable
-    env.check_write_permissions()
-
-    # Don't add file logging until we have verified that the data directory is writable
-    add_file_logging()
-
-    logger.info(
-        "Starting Spoolman v%s (commit: %s) (built: %s)",
-        app.version,
-        env.get_commit_hash(),
-        env.get_build_date(),
-    )
-
-    logger.info("Using data directory: %s", env.get_data_dir().resolve())
-    logger.info("Using logs directory: %s", env.get_logs_dir().resolve())
-    logger.info("Using backups directory: %s", env.get_backups_dir().resolve())
-
-    logger.info("Setting up database...")
-    database.setup_db(database.get_connection_url())
-
-    logger.info("Performing migrations...")
-    # Run alembic in a subprocess.
-    # There is some issue with the uvicorn worker that causes the process to hang when running alembic directly.
-    # See: https://github.com/sqlalchemy/alembic/discussions/1155
-    project_root = Path(__file__).parent.parent
-    subprocess.run(["alembic", "upgrade", "head"], check=True, cwd=project_root)  # noqa: ASYNC221, S607
-
-    # Setup scheduler
-    schedule = Scheduler()
-    database.schedule_tasks(schedule)
-    externaldb.schedule_tasks(schedule)
-
-    logger.info("Startup complete.")
-
-    if env.is_docker() and not env.is_data_dir_mounted():
-        logger.warning("!!!! WARNING !!!!")
-        logger.warning("!!!! WARNING !!!!")
-        logger.warning("The data directory is not mounted.")
-        logger.warning(
-            'Spoolman stores its database in the container directory "%s". '
-            "If this directory isn't mounted to the host OS, the database will be lost when the container is stopped.",
-            env.get_data_dir(),
-        )
-        logger.warning(
-            "Please carefully read the docker part of the README.md file, "
-            "and ensure your docker-compose file matches the example.",
-        )
-        logger.warning("!!!! WARNING !!!!")
-        logger.warning("!!!! WARNING !!!!")
 
 
 if __name__ == "__main__":

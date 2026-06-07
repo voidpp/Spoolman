@@ -1,10 +1,12 @@
-import { FileOutlined, HighlightOutlined, SolutionOutlined, ToolOutlined, UserOutlined } from "@ant-design/icons";
+import { FileOutlined, HighlightOutlined, KeyOutlined, SolutionOutlined, ToolOutlined, UserOutlined } from "@ant-design/icons";
 import { useTranslate } from "@refinedev/core";
 import { Menu, theme } from "antd";
 import { Content } from "antd/es/layout/layout";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { Route, Routes, useNavigate } from "react-router";
+import { useAuth } from "../../contexts/auth";  // FORK: multi-tenancy
+import { AuthSettings } from "./authSettings";  // FORK: multi-tenancy
 import { ExtraFieldsSettings } from "./extraFieldsSettings";
 import { GeneralSettings } from "./generalSettings";
 
@@ -16,6 +18,7 @@ export const Settings = () => {
   const { token } = useToken();
   const t = useTranslate();
   const navigate = useNavigate();
+  const { authEnabled } = useAuth();  // FORK: multi-tenancy
 
   const getCurrentKey = () => {
     const path = window.location.pathname.replace("/settings", "");
@@ -57,6 +60,8 @@ export const Settings = () => {
           }}
           items={[
             { key: "", label: t("settings.general.tab"), icon: <ToolOutlined /> },
+            // FORK: multi-tenancy
+            ...(authEnabled ? [{ key: "account", label: "Account", icon: <KeyOutlined /> }] : []),
             {
               key: "extra",
               label: t("settings.extra_fields.tab"),
@@ -88,6 +93,8 @@ export const Settings = () => {
           <Routes>
             <Route index element={<GeneralSettings />} />
             <Route path="/extra/:entityType" element={<ExtraFieldsSettings />} />
+            {/* FORK: multi-tenancy */}
+            <Route path="/account" element={<AuthSettings />} />
           </Routes>
         </main>
       </Content>

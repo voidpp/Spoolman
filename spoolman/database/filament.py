@@ -227,12 +227,7 @@ async def find_by_color(
     color_query_hex: str,
     similarity_threshold: float = 25,
 ) -> list[models.Filament]:
-    """Find a list of filament objects by similarity to a color.
-
-    This performs a server-side search, where all filaments are loaded into memory, making it not so efficient.
-    The similarity threshold is a value between 0 and 100, where 0 means the colors must be identical and 100 means
-    pretty much all colors are considered similar.
-    """
+    """Find a list of filament objects by similarity to a color."""
     filaments, _ = await find(db=db)
 
     color_query_lab = rgb_to_lab(hex_to_rgb(color_query_hex))

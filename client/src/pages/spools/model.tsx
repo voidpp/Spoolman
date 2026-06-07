@@ -9,6 +9,7 @@ export enum WeightToEnter {
 export interface ISpool {
   id: number;
   registered: string;
+  purchased?: string;
   first_used?: string;
   last_used?: string;
   filament: IFilament;

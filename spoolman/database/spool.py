@@ -43,15 +43,17 @@ async def create(
     used_weight: float | None = None,
     first_used: datetime | None = None,
     last_used: datetime | None = None,
+    purchased: datetime | None = None,  # FORK: multi-tenancy
     price: float | None = None,
     location: str | None = None,
     lot_nr: str | None = None,
     comment: str | None = None,
     archived: bool = False,
     extra: dict[str, str] | None = None,
+    user_id: int | None = None,  # FORK: multi-tenancy
 ) -> models.Spool:
     """Add a new spool to the database. Leave weight empty to assume full spool."""
-    filament_item = await filament.get_by_id(db, filament_id)
+    filament_item = await filament.get_by_id(db, filament_id)  # FORK: filaments are now global
 
     # Set spool_weight to spool_weight if spool_weight is not null and spool_weight not provided
     if spool_weight is None and filament_item.spool_weight is not None:
@@ -77,10 +79,14 @@ async def create(
         first_used = utc_timezone_naive(first_used)
     if last_used is not None:
         last_used = utc_timezone_naive(last_used)
+    now = datetime.utcnow().replace(microsecond=0)
+    # FORK: multi-tenancy — purchased defaults to now if not provided
+    purchased_val = utc_timezone_naive(purchased) if purchased is not None else now
 
     spool = models.Spool(
         filament=filament_item,
-        registered=datetime.utcnow().replace(microsecond=0),
+        registered=now,
+        purchased=purchased_val,  # FORK: multi-tenancy
         initial_weight=initial_weight,
         spool_weight=spool_weight,
         used_weight=used_weight,
@@ -92,6 +98,7 @@ async def create(
         comment=comment,
         archived=archived,
         extra=[models.SpoolField(key=k, value=v) for k, v in (extra or {}).items()],
+        user_id=user_id,  # FORK: multi-tenancy
     )
     db.add(spool)
     await db.commit()
@@ -99,14 +106,14 @@ async def create(
     return spool
 
 
-async def get_by_id(db: AsyncSession, spool_id: int) -> models.Spool:
+async def get_by_id(db: AsyncSession, spool_id: int, user_id: int | None = None) -> models.Spool:  # FORK: multi-tenancy
     """Get a spool object from the database by the unique ID."""
     spool = await db.get(
         models.Spool,
         spool_id,
         options=[joinedload("*")],  # Load all nested objects as well
     )
-    if spool is None:
+    if spool is None or (user_id is not None and spool.user_id != user_id):  # FORK: multi-tenancy
         raise ItemNotFoundError(f"No spool with ID {spool_id} found.")
     return spool
 
@@ -125,6 +132,7 @@ async def find(  # noqa: C901, PLR0912
     sort_by: dict[str, SortOrder] | None = None,
     limit: int | None = None,
     offset: int = 0,
+    user_id: int | None = None,  # FORK: multi-tenancy
 ) -> tuple[list[models.Spool], int]:
     """Find a list of spool objects by search criteria.
 
@@ -139,6 +147,10 @@ async def find(  # noqa: C901, PLR0912
         .join(models.Filament.vendor, isouter=True)
         .options(contains_eager(models.Spool.filament).contains_eager(models.Filament.vendor))
     )
+
+    # FORK: multi-tenancy — filter by owner
+    if user_id is not None:
+        stmt = stmt.where(models.Spool.user_id == user_id)
 
     stmt = add_where_clause_int(stmt, models.Spool.filament_id, filament_id)
     stmt = add_where_clause_int_opt(stmt, models.Filament.vendor_id, vendor_id)
@@ -213,12 +225,13 @@ async def update(
     db: AsyncSession,
     spool_id: int,
     data: dict,
+    user_id: int | None = None,  # FORK: multi-tenancy
 ) -> models.Spool:
     """Update the fields of a spool object."""
-    spool = await get_by_id(db, spool_id)
+    spool = await get_by_id(db, spool_id, user_id=user_id)  # FORK: multi-tenancy
     for k, v in data.items():
         if k == "filament_id":
-            spool.filament = await filament.get_by_id(db, v)
+            spool.filament = await filament.get_by_id(db, v, user_id=user_id)  # FORK: multi-tenancy
             # If there is no initial_weight, calculate it from the filament weight
             if spool.initial_weight is None and spool.filament.weight is not None:
                 spool.initial_weight = spool.filament.weight
@@ -239,9 +252,9 @@ async def update(
     return spool
 
 
-async def delete(db: AsyncSession, spool_id: int) -> None:
+async def delete(db: AsyncSession, spool_id: int, user_id: int | None = None) -> None:  # FORK: multi-tenancy
     """Delete a spool object."""
-    spool = await get_by_id(db, spool_id)
+    spool = await get_by_id(db, spool_id, user_id=user_id)  # FORK: multi-tenancy
     await spool_changed(spool, EventType.DELETED)
     await db.delete(spool)
 
@@ -274,7 +287,7 @@ async def use_weight_safe(db: AsyncSession, spool_id: int, weight: float) -> Non
     )
 
 
-async def use_weight(db: AsyncSession, spool_id: int, weight: float) -> models.Spool:
+async def use_weight(db: AsyncSession, spool_id: int, weight: float, user_id: int | None = None) -> models.Spool:  # FORK: multi-tenancy
     """Consume filament from a spool by weight.
 
     Increases the used_weight attribute of the spool.
@@ -291,7 +304,7 @@ async def use_weight(db: AsyncSession, spool_id: int, weight: float) -> models.S
     """
     await use_weight_safe(db, spool_id, weight)
 
-    spool = await get_by_id(db, spool_id)
+    spool = await get_by_id(db, spool_id, user_id=user_id)  # FORK: multi-tenancy
 
     if spool.first_used is None:
         spool.first_used = datetime.utcnow().replace(microsecond=0)
@@ -302,7 +315,7 @@ async def use_weight(db: AsyncSession, spool_id: int, weight: float) -> models.S
     return spool
 
 
-async def use_length(db: AsyncSession, spool_id: int, length: float) -> models.Spool:
+async def use_length(db: AsyncSession, spool_id: int, length: float, user_id: int | None = None) -> models.Spool:  # FORK: multi-tenancy
     """Consume filament from a spool by length.
 
     Increases the used_weight attribute of the spool.
@@ -337,7 +350,7 @@ async def use_length(db: AsyncSession, spool_id: int, length: float) -> models.S
     await use_weight_safe(db, spool_id, weight)
 
     # Get spool with new weight and update first_used and last_used
-    spool = await get_by_id(db, spool_id)
+    spool = await get_by_id(db, spool_id, user_id=user_id)  # FORK: multi-tenancy
 
     if spool.first_used is None:
         spool.first_used = datetime.utcnow().replace(microsecond=0)
@@ -348,7 +361,7 @@ async def use_length(db: AsyncSession, spool_id: int, length: float) -> models.S
     return spool
 
 
-async def measure(db: AsyncSession, spool_id: int, weight: float) -> models.Spool:
+async def measure(db: AsyncSession, spool_id: int, weight: float, user_id: int | None = None) -> models.Spool:  # FORK: multi-tenancy
     """Record usage based on current gross weight of spool.
 
     Increases the used_weight attribute of the spool.
@@ -413,7 +426,7 @@ async def measure(db: AsyncSession, spool_id: int, weight: float) -> models.Spoo
     if (initial_gross_weight - weight_to_use) < spool_weight:
         weight_to_use = current_use - spool_weight
 
-    return await use_weight(db, spool_id, weight_to_use)
+    return await use_weight(db, spool_id, weight_to_use, user_id=user_id)  # FORK: multi-tenancy
 
 
 async def find_locations(

@@ -229,6 +229,7 @@ class Filament(BaseModel):
 class Spool(BaseModel):
     id: int = Field(description="Unique internal ID of this spool of filament.")
     registered: SpoolmanDateTime = Field(description="When the spool was registered in the database. UTC Timezone.")
+    purchased: SpoolmanDateTime | None = Field(None, description="When the spool was purchased. UTC Timezone.")  # FORK: multi-tenancy
     first_used: SpoolmanDateTime | None = Field(
         None,
         description="First logged occurence of spool usage. UTC Timezone.",
@@ -342,6 +343,7 @@ class Spool(BaseModel):
         return Spool(
             id=item.id,
             registered=item.registered,
+            purchased=item.purchased,  # FORK: multi-tenancy
             first_used=item.first_used,
             last_used=item.last_used,
             filament=filament,

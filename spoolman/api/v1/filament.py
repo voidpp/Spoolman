@@ -11,8 +11,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from spoolman.api.v1.models import Filament, FilamentEvent, Message, MultiColorDirection
+from spoolman.auth.dependencies import get_current_admin, get_current_user  # FORK: multi-tenancy
 from spoolman.database import filament
 from spoolman.database.database import get_db_session
+from spoolman.database.models import AuthUser  # FORK: multi-tenancy
 from spoolman.database.utils import SortOrder
 from spoolman.exceptions import ItemDeleteError
 from spoolman.extra_fields import EntityType, get_extra_fields, validate_extra_field_dict
@@ -202,6 +204,7 @@ class FilamentUpdateParameters(FilamentParameters):
 async def find(
     *,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     vendor_name_old: Annotated[
         str | None,
         Query(alias="vendor_name", title="Vendor Name", description="See vendor.name.", deprecated=True),
@@ -396,6 +399,7 @@ async def notify_any(
 )
 async def get(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy — any user can read
     filament_id: int,
 ) -> Filament:
     db_item = await filament.get_by_id(db, filament_id)
@@ -431,6 +435,7 @@ async def notify(
 )
 async def create(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _admin: Annotated[AuthUser, Depends(get_current_admin)],  # FORK: multi-tenancy — admin only
     body: FilamentParameters,
 ):
     if body.extra:
@@ -480,6 +485,7 @@ async def create(  # noqa: ANN201
 )
 async def update(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _admin: Annotated[AuthUser, Depends(get_current_admin)],  # FORK: multi-tenancy — admin only
     filament_id: int,
     body: FilamentUpdateParameters,
 ):
@@ -513,6 +519,7 @@ async def update(  # noqa: ANN201
 )
 async def delete(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _admin: Annotated[AuthUser, Depends(get_current_admin)],  # FORK: multi-tenancy — admin only
     filament_id: int,
 ):
     try:

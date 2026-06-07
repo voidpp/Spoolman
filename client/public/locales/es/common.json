@@ -73,6 +73,7 @@
             "first_used": "Fecha de Primer Uso",
             "last_used": "Ultimo Uso",
             "registered": "Registrado",
+            "purchased": "Comprado",
             "comment": "Comentarios",
             "archived": "Archivado",
             "measured_weight": "Peso Medido",

@@ -10,8 +10,10 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from spoolman.api.v1.models import Message, Vendor, VendorEvent
+from spoolman.auth.dependencies import get_current_admin, get_current_user  # FORK: multi-tenancy
 from spoolman.database import vendor
 from spoolman.database.database import get_db_session
+from spoolman.database.models import AuthUser  # FORK: multi-tenancy
 from spoolman.database.utils import SortOrder
 from spoolman.extra_fields import EntityType, get_extra_fields, validate_extra_field_dict
 from spoolman.ws import websocket_manager
@@ -80,6 +82,7 @@ class VendorUpdateParameters(VendorParameters):
 )
 async def find(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy — any user can read
     name: Annotated[
         str | None,
         Query(
@@ -172,6 +175,7 @@ async def notify_any(
 )
 async def get(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy — any user can read
     vendor_id: int,
 ) -> Vendor:
     db_item = await vendor.get_by_id(db, vendor_id)
@@ -207,6 +211,7 @@ async def notify(
 )
 async def create(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _admin: Annotated[AuthUser, Depends(get_current_admin)],  # FORK: multi-tenancy — admin only
     body: VendorParameters,
 ):
     if body.extra:
@@ -244,6 +249,7 @@ async def create(  # noqa: ANN201
 )
 async def update(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _admin: Annotated[AuthUser, Depends(get_current_admin)],  # FORK: multi-tenancy — admin only
     vendor_id: int,
     body: VendorUpdateParameters,
 ):
@@ -275,6 +281,7 @@ async def update(  # noqa: ANN201
 )
 async def delete(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    _admin: Annotated[AuthUser, Depends(get_current_admin)],  # FORK: multi-tenancy — admin only
     vendor_id: int,
 ) -> Message:
     await vendor.delete(db, vendor_id)

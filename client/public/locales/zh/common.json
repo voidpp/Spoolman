@@ -175,6 +175,7 @@
             "first_used": "首次使用",
             "last_used": "最后使用",
             "registered": "登记时间",
+            "purchased": "购买日期",
             "comment": "备注",
             "archived": "存档",
             "price": "价格",

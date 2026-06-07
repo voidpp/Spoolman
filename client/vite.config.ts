@@ -49,6 +49,8 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        // FORK: multi-tenancy — don't intercept API/auth navigations with the SW
+        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
   ],

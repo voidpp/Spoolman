@@ -2,6 +2,7 @@
     "spool": {
         "fields": {
             "registered": "ลงทะเบียน",
+            "purchased": "ซื้อเมื่อ",
             "remaining_length": "ความยาวคงเหลือ",
             "lot_nr": "เลขล็อต",
             "archived": "เก็บถาวร",

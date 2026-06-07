@@ -1,9 +1,10 @@
-import { DownOutlined } from "@ant-design/icons";
+import { DownOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons";
 import type { RefineThemedLayoutHeaderProps } from "@refinedev/antd";
 import { useGetLocale, useSetLocale } from "@refinedev/core";
-import { Layout as AntdLayout, Button, Dropdown, MenuProps, Space, Switch, theme } from "antd";
+import { Avatar, Layout as AntdLayout, Button, Dropdown, MenuProps, Space, Switch, Tooltip, theme } from "antd";
 import React, { useContext } from "react";
 import { ColorModeContext } from "../../contexts/color-mode";
+import { useAuth } from "../../contexts/auth"; // FORK: multi-tenancy
 
 import { languages } from "../../i18n";
 import QRCodeScannerModal from "../qrCodeScanner";
@@ -15,6 +16,7 @@ export const Header = ({ sticky }: RefineThemedLayoutHeaderProps) => {
   const locale = useGetLocale();
   const changeLanguage = useSetLocale();
   const { mode, setMode } = useContext(ColorModeContext);
+  const { user, authEnabled } = useAuth(); // FORK: multi-tenancy
 
   const currentLocale = locale();
 
@@ -62,6 +64,34 @@ export const Header = ({ sticky }: RefineThemedLayoutHeaderProps) => {
           defaultChecked={mode === "dark"}
         />
         <QRCodeScannerModal />
+        {/* FORK: multi-tenancy — user avatar + logout */}
+        {authEnabled && user && (
+          <Space style={{ cursor: "default", marginLeft: 8 }}>
+            <Tooltip title={`${user.name} (${user.email})`}>
+              <Space>
+                {user.avatar_url ? (
+                  <Avatar src={user.avatar_url} size={32} />
+                ) : (
+                  <Avatar size={32} icon={<UserOutlined />} style={{ backgroundColor: token.colorPrimary }} />
+                )}
+                <span style={{ fontSize: 14, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {user.name}
+                </span>
+              </Space>
+            </Tooltip>
+            <Tooltip title="Sign out">
+              <Button
+                type="text"
+                size="small"
+                icon={<LogoutOutlined />}
+                onClick={async () => {
+                  await fetch("/api/v1/auth/logout", { method: "POST" });
+                  window.location.href = "/login";
+                }}
+              />
+            </Tooltip>
+          </Space>
+        )}
       </Space>
     </AntdLayout.Header>
   );

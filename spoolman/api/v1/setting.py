@@ -9,8 +9,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from spoolman.api.v1.models import Message, SettingEvent, SettingResponse
-from spoolman.database import setting
+from spoolman.auth.dependencies import get_current_user  # FORK: multi-tenancy
+from spoolman.database import user_setting  # FORK: multi-tenancy
 from spoolman.database.database import get_db_session
+from spoolman.database.models import AuthUser  # FORK: multi-tenancy
 from spoolman.exceptions import ItemNotFoundError
 from spoolman.settings import SETTINGS, parse_setting
 from spoolman.ws import websocket_manager
@@ -57,6 +59,7 @@ async def notify_any(
 )
 async def get(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     key: str,
 ) -> SettingResponse | JSONResponse:
     try:
@@ -65,7 +68,7 @@ async def get(
         return JSONResponse(status_code=404, content=Message(message=str(e)).dict())
 
     try:
-        db_item = await setting.get(db, definition)
+        db_item = await user_setting.get(db, current_user.id, definition)  # FORK: multi-tenancy
         value = db_item.value
         is_set = True
     except ItemNotFoundError:
@@ -88,11 +91,12 @@ async def get(
 )
 async def find(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
 ) -> dict[str, SettingResponse] | JSONResponse:
     settings: dict[str, SettingResponse] = {}
 
     # First get all settings that have been set.
-    db_items = await setting.get_all(db)
+    db_items = await user_setting.get_all(db, current_user.id)  # FORK: multi-tenancy
     for db_item in db_items:
         try:
             definition = parse_setting(db_item.key)
@@ -156,6 +160,7 @@ async def notify(
 )
 async def update(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     key: str,
     body: Annotated[str, Body()],
 ) -> SettingResponse | JSONResponse:
@@ -170,17 +175,17 @@ async def update(
         except ValueError as e:
             return JSONResponse(status_code=400, content=Message(message=str(e)).dict())
 
-        await setting.update(db=db, definition=definition, value=body)
+        await user_setting.update(db=db, user_id=current_user.id, definition=definition, value=body)  # FORK: multi-tenancy
         logger.info('Setting "%s" has been set to "%s".', key, body)
     else:
-        await setting.delete(db=db, definition=definition)
+        await user_setting.delete(db=db, user_id=current_user.id, definition=definition)  # FORK: multi-tenancy
         logger.info('Setting "%s" has been unset.', key)
 
     await db.commit()
 
     # Get the new value of the setting.
     try:
-        db_item = await setting.get(db, definition)
+        db_item = await user_setting.get(db, current_user.id, definition)  # FORK: multi-tenancy
         value = db_item.value
         is_set = True
     except ItemNotFoundError:

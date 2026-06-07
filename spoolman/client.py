@@ -59,7 +59,7 @@ class SinglePageApplication(StaticFiles):
         if Path(full_path).name == "index.html":
             return Response(self.html, status_code=status_code, media_type="text/html")
 
-        response = FileResponse(full_path, status_code=status_code, stat_result=stat_result, method=method)
+        response = FileResponse(full_path, status_code=status_code, stat_result=stat_result)
         if self.is_not_modified(response.headers, request_headers):
             return NotModifiedResponse(response.headers)
         return response

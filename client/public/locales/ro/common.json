@@ -192,6 +192,7 @@
         "fields": {
             "weight_to_use": "Greutate",
             "registered": "Înregistrat",
+            "purchased": "Cumpărat",
             "used_weight": "Greutate folosita",
             "first_used": "Prima utilizare",
             "location": "Locație",

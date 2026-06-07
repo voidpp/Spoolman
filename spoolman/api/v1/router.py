@@ -11,6 +11,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from spoolman import env
+from spoolman.auth.router import router as auth_router  # FORK: multi-tenancy
+from spoolman.mcp.server import create_mounted_app as _create_mcp_app  # FORK: multi-tenancy
 from spoolman.database.database import backup_global_db
 from spoolman.exceptions import ItemNotFoundError
 from spoolman.ws import websocket_manager
@@ -18,6 +20,9 @@ from spoolman.ws import websocket_manager
 from . import export, externaldb, field, filament, models, other, setting, spool, vendor
 
 logger = logging.getLogger(__name__)
+
+# FORK: multi-tenancy — create MCP ASGI app and wire its lifespan into v1_app
+_mcp_asgi = _create_mcp_app("http://localhost:7912/api/v1")
 
 app = FastAPI(
     title="Spoolman REST API v1",
@@ -104,6 +109,11 @@ async def notify(
 
 
 # Add routers
+app.include_router(auth_router)  # FORK: multi-tenancy
+
+# FORK: multi-tenancy — MCP endpoint at /api/v1/mcp
+# Web agents: https://your-domain/api/v1/mcp  Authorization: Bearer <token>
+app.mount("/mcp", _mcp_asgi)
 app.include_router(filament.router)
 app.include_router(spool.router)
 app.include_router(vendor.router)

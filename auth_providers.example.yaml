@@ -1,0 +1,32 @@
+# Spoolman OAuth2 provider configuration
+# Copy this file to auth_providers.yaml and fill in your values.
+# The file is loaded from the directory where you run Spoolman, or from
+# the SPOOLMAN_AUTH_CONFIG environment variable path.
+
+# Secret used to sign session cookies. Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+jwt_secret: "change-me-to-a-random-secret-at-least-32-chars"
+
+# How long a session cookie is valid (days)
+jwt_expire_days: 30
+
+providers:
+  google:
+    enabled: false
+    client_id: ""
+    client_secret: ""
+    # Redirect URI registered in Google Cloud Console:
+    # https://<your-domain>/api/v1/auth/callback/google
+
+  github:
+    enabled: false
+    client_id: ""
+    client_secret: ""
+    # Redirect URI registered in GitHub OAuth App:
+    # https://<your-domain>/api/v1/auth/callback/github
+
+# Optional: restrict sign-ups to specific email domains.
+# Leave empty to allow any email address.
+allowed_email_domains: []
+# allowed_email_domains:
+#   - mycompany.com
+#   - example.org

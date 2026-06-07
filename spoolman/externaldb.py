@@ -142,12 +142,12 @@ async def _download_file(url: str) -> bytes:
 
 def _parse_filaments_from_bytes(data: bytes) -> ExternalFilamentsFile:
     """Parse a bytes string into a list of ExternalFilament objects."""
-    return ExternalFilamentsFile.parse_raw(data)
+    return ExternalFilamentsFile.model_validate_json(data)
 
 
 def _parse_materials_from_bytes(data: bytes) -> ExternalMaterialsFile:
     """Parse a bytes string into a list of ExternalMaterial objects."""
-    return ExternalMaterialsFile.parse_raw(data)
+    return ExternalMaterialsFile.model_validate_json(data)
 
 
 def _write_to_local_cache(filename: str, data: bytes) -> None:
@@ -173,8 +173,8 @@ async def _sync() -> None:
     filaments = _parse_filaments_from_bytes(await _download_file(urljoin(url, "filaments.json")))
     materials = _parse_materials_from_bytes(await _download_file(urljoin(url, "materials.json")))
 
-    _write_to_local_cache("filaments.json", filaments.json().encode())
-    _write_to_local_cache("materials.json", materials.json().encode())
+    _write_to_local_cache("filaments.json", filaments.model_dump_json().encode())
+    _write_to_local_cache("materials.json", materials.model_dump_json().encode())
 
     logger.info(
         "External DB synced. Filaments: %d, Materials: %d",

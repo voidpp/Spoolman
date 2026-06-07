@@ -1,3 +1,4 @@
+// FORK: multi-tenancy — added AuthProvider, login route, share route
 import { Refine } from "@refinedev/core";
 import { RefineKbar, RefineKbarProvider } from "@refinedev/kbar";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
@@ -18,7 +19,7 @@ import loadable from "@loadable/component";
 import routerBindings, { DocumentTitleHandler, UnsavedChangesNotifier } from "@refinedev/react-router";
 import { ConfigProvider } from "antd";
 import { Locale } from "antd/es/locale";
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router";
 import dataProvider from "./components/dataProvider";
@@ -27,8 +28,20 @@ import { SpoolmanLayout } from "./components/layout";
 import liveProvider from "./components/liveProvider";
 import SpoolmanNotificationProvider from "./components/notificationProvider";
 import { ColorModeContextProvider } from "./contexts/color-mode";
+import { AuthProvider, useAuth } from "./contexts/auth";  // FORK: multi-tenancy
 import { languages } from "./i18n";
 import { getAPIURL, getBasePath } from "./utils/url";
+
+// FORK: multi-tenancy — auth guard wraps protected routes
+const AuthGuard = ({ children }: { children: ReactNode }) => {
+  const { user, loading, authEnabled } = useAuth();
+  if (loading) return null;
+  if (authEnabled && !user) {
+    window.location.href = `${getBasePath()}/login`;
+    return null;
+  }
+  return <>{children}</>;
+};
 
 interface ResourcePageProps {
   resource: "spools" | "filaments" | "vendors";
@@ -88,6 +101,7 @@ function App() {
 
   return (
     <BrowserRouter basename={getBasePath() + "/"}>
+      <AuthProvider> {/* FORK: multi-tenancy */}
       <RefineKbarProvider>
         <ColorModeContextProvider>
           <ConfigProvider locale={antdLocale}>
@@ -174,11 +188,16 @@ function App() {
               }}
             >
               <Routes>
+                {/* FORK: multi-tenancy — public routes */}
+                <Route path="/login" element={<LoadablePage name="login" />} />
+                <Route path="/share/:token" element={<LoadablePage name="share" />} />
                 <Route
                   element={
-                    <SpoolmanLayout>
-                      <Outlet />
-                    </SpoolmanLayout>
+                    <AuthGuard>
+                      <SpoolmanLayout>
+                        <Outlet />
+                      </SpoolmanLayout>
+                    </AuthGuard>
                   }
                 >
                   <Route index element={<LoadablePage name="home" />} />
@@ -238,6 +257,7 @@ function App() {
           </ConfigProvider>
         </ColorModeContextProvider>
       </RefineKbarProvider>
+      </AuthProvider> {/* FORK: multi-tenancy */}
     </BrowserRouter>
   );
 }

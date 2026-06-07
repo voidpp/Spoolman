@@ -88,6 +88,7 @@ const allColumns: (keyof ISpoolCollapsed & string)[] = [
   "remaining_length",
   "location",
   "lot_nr",
+  "purchased",
   "first_used",
   "last_used",
   "registered",
@@ -435,6 +436,12 @@ export const SpoolList = () => {
             i18ncat: "spool",
             filterValueQuery: useSpoolmanLotNumbers(),
             width: 120,
+          }),
+          DateColumn({
+            ...commonProps,
+            id: "purchased",
+            i18ncat: "spool",
+            dateOnly: true,
           }),
           DateColumn({
             ...commonProps,

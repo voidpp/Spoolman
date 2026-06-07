@@ -250,7 +250,8 @@ export function NumberColumn<Obj extends Entity>(props: NumberColumnProps<Obj>) 
   });
 }
 
-export function DateColumn<Obj extends Entity>(props: BaseColumnProps<Obj>) {
+export function DateColumn<Obj extends Entity>(props: BaseColumnProps<Obj> & { dateOnly?: boolean }) {
+  const fmt = props.dateOnly ? "YYYY-MM-DD" : "YYYY-MM-DD HH:mm";
   return Column({
     ...props,
     render: (rawValue) => {
@@ -260,7 +261,7 @@ export function DateColumn<Obj extends Entity>(props: BaseColumnProps<Obj>) {
           hidden={!value}
           value={dayjs.utc(value).local()}
           title={dayjs.utc(value).local().format()}
-          format="YYYY-MM-DD HH:mm"
+          format={fmt}
         />
       );
     },
@@ -356,7 +357,7 @@ export function SpoolIconColumn<Obj extends Entity>(props: SpoolIconColumnProps<
               <SpoolIcon color={colorObj} />
             </Col>
           )}
-          <Col flex="auto">{value}</Col>
+          <Col flex="auto" style={{ paddingLeft: colorObj ? 0 : 8 }}>{value}</Col>
         </Row>
       );
     },

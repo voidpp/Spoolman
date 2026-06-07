@@ -160,6 +160,7 @@
             "material": "マテリアル",
             "weight_to_use": "重さ",
             "registered": "登録",
+            "purchased": "購入日",
             "archived": "アーカイブ",
             "used_length": "使用した長さ",
             "initial_weight": "最初の重さ",

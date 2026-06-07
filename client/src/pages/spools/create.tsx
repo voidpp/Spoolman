@@ -277,6 +277,16 @@ export const SpoolCreate = (props: IResourceComponentsProps & CreateOrCloneProps
     >
       <Form {...formProps} layout="vertical">
         <Form.Item
+          label={t("spool.fields.purchased")}
+          name={["purchased"]}
+          rules={[{ required: false }]}
+          getValueProps={(value) => ({
+            value: value ? dayjs(value) : undefined,
+          })}
+        >
+          <DatePicker format="YYYY-MM-DD" />
+        </Form.Item>
+        <Form.Item
           label={t("spool.fields.first_used")}
           name={["first_used"]}
           rules={[

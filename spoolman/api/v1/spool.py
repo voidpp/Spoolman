@@ -12,8 +12,10 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from spoolman.api.v1.models import Message, Spool, SpoolEvent
+from spoolman.auth.dependencies import get_current_user  # FORK: multi-tenancy
 from spoolman.database import spool
 from spoolman.database.database import get_db_session
+from spoolman.database.models import AuthUser  # FORK: multi-tenancy
 from spoolman.database.utils import SortOrder
 from spoolman.exceptions import ItemCreateError, SpoolMeasureError
 from spoolman.extra_fields import EntityType, get_extra_fields, validate_extra_field_dict
@@ -32,6 +34,7 @@ router = APIRouter(
 class SpoolParameters(BaseModel):
     first_used: datetime | None = Field(None, description="First logged occurence of spool usage.")
     last_used: datetime | None = Field(None, description="Last logged occurence of spool usage.")
+    purchased: datetime | None = Field(None, description="Date the spool was purchased. Defaults to now if not set.")  # FORK: multi-tenancy
     filament_id: int = Field(description="The ID of the filament type of this spool.")
     price: float | None = Field(
         None,
@@ -128,6 +131,7 @@ class SpoolMeasureParameters(BaseModel):
 async def find(
     *,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     filament_name_old: Annotated[
         str | None,
         Query(alias="filament_name", title="Filament Name", description="See filament.name.", deprecated=True),
@@ -298,6 +302,7 @@ async def find(
         sort_by=sort_by,
         limit=limit,
         offset=offset,
+        user_id=current_user.id,  # FORK: multi-tenancy
     )
 
     # Set x-total-count header for pagination
@@ -340,9 +345,10 @@ async def notify_any(
 )
 async def get(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     spool_id: int,
 ) -> Spool:
-    db_item = await spool.get_by_id(db, spool_id)
+    db_item = await spool.get_by_id(db, spool_id, user_id=current_user.id)  # FORK: multi-tenancy
     return Spool.from_db(db_item)
 
 
@@ -381,6 +387,7 @@ async def notify(
 )
 async def create(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     body: SpoolParameters,
 ):
     if body.remaining_weight is not None and body.used_weight is not None:
@@ -407,11 +414,13 @@ async def create(  # noqa: ANN201
             used_weight=body.used_weight,
             first_used=body.first_used,
             last_used=body.last_used,
+            purchased=body.purchased,  # FORK: multi-tenancy
             location=body.location,
             lot_nr=body.lot_nr,
             comment=body.comment,
             archived=body.archived,
             extra=body.extra,
+            user_id=current_user.id,  # FORK: multi-tenancy
         )
         return Spool.from_db(db_item)
     except ItemCreateError:
@@ -440,6 +449,7 @@ async def create(  # noqa: ANN201
 )
 async def update(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     spool_id: int,
     body: SpoolUpdateParameters,
 ):
@@ -463,6 +473,7 @@ async def update(  # noqa: ANN201
             db=db,
             spool_id=spool_id,
             data=patch_data,
+            user_id=current_user.id,  # FORK: multi-tenancy
         )
     except ItemCreateError:
         logger.exception("Failed to update spool.")
@@ -482,9 +493,10 @@ async def update(  # noqa: ANN201
 )
 async def delete(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     spool_id: int,
 ) -> Message:
-    await spool.delete(db, spool_id)
+    await spool.delete(db, spool_id, user_id=current_user.id)  # FORK: multi-tenancy
     return Message(message="Success!")
 
 
@@ -503,6 +515,7 @@ async def delete(
 )
 async def use(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     spool_id: int,
     body: SpoolUseParameters,
 ):
@@ -513,11 +526,11 @@ async def use(  # noqa: ANN201
         )
 
     if body.use_weight is not None:
-        db_item = await spool.use_weight(db, spool_id, body.use_weight)
+        db_item = await spool.use_weight(db, spool_id, body.use_weight, user_id=current_user.id)  # FORK: multi-tenancy
         return Spool.from_db(db_item)
 
     if body.use_length is not None:
-        db_item = await spool.use_length(db, spool_id, body.use_length)
+        db_item = await spool.use_length(db, spool_id, body.use_length, user_id=current_user.id)  # FORK: multi-tenancy
         return Spool.from_db(db_item)
 
     return JSONResponse(
@@ -539,11 +552,12 @@ async def use(  # noqa: ANN201
 )
 async def measure(  # noqa: ANN201
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user)],  # FORK: multi-tenancy
     spool_id: int,
     body: SpoolMeasureParameters,
 ):
     try:
-        db_item = await spool.measure(db, spool_id, body.weight)
+        db_item = await spool.measure(db, spool_id, body.weight, user_id=current_user.id)  # FORK: multi-tenancy
         return Spool.from_db(db_item)
     except SpoolMeasureError as e:
         logger.exception("Failed to update spool measurement.")

@@ -3,13 +3,77 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
+
+
+# FORK: multi-tenancy — auth tables
+class AuthUser(Base):
+    __tablename__ = "auth_user"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(256), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(256))
+    avatar_url: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column()
+    is_admin: Mapped[bool] = mapped_column(default=False)  # FORK: multi-tenancy
+
+    oauth_accounts: Mapped[list["AuthOAuthAccount"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    api_tokens: Mapped[list["AuthApiToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    share_links: Mapped[list["AuthShareLink"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class AuthOAuthAccount(Base):
+    __tablename__ = "auth_oauth_account"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("auth_user.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_user_id: Mapped[str] = mapped_column(String(256))
+    user: Mapped["AuthUser"] = relationship(back_populates="oauth_accounts")
+
+    __table_args__ = (UniqueConstraint("provider", "provider_user_id"),)
+
+
+class AuthApiToken(Base):
+    __tablename__ = "auth_api_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("auth_user.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column()
+    last_used_at: Mapped[datetime | None] = mapped_column()
+    user: Mapped["AuthUser"] = relationship(back_populates="api_tokens")
+
+
+class AuthShareLink(Base):
+    __tablename__ = "auth_share_link"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("auth_user.id"), index=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    label: Mapped[str | None] = mapped_column(String(256))
+    created_at: Mapped[datetime] = mapped_column()
+    user: Mapped["AuthUser"] = relationship(back_populates="share_links")
+
+
+# FORK: multi-tenancy — user-scoped settings
+class UserSetting(Base):
+    __tablename__ = "user_setting"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("auth_user.id"), index=True)
+    key: Mapped[str] = mapped_column(String(64))
+    value: Mapped[str] = mapped_column(Text())
+    last_updated: Mapped[datetime] = mapped_column()
+
+    __table_args__ = (UniqueConstraint("user_id", "key"),)
 
 
 class Vendor(Base):
@@ -64,6 +128,7 @@ class Spool(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     registered: Mapped[datetime] = mapped_column()
+    purchased: Mapped[datetime | None] = mapped_column()  # FORK: multi-tenancy
     first_used: Mapped[datetime | None] = mapped_column()
     last_used: Mapped[datetime | None] = mapped_column()
     price: Mapped[float | None] = mapped_column()
@@ -81,6 +146,8 @@ class Spool(Base):
         cascade="save-update, merge, delete, delete-orphan",
         lazy="joined",
     )
+    # FORK: multi-tenancy
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("auth_user.id"), index=True)
 
 
 class Setting(Base):
