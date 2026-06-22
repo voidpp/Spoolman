@@ -205,3 +205,8 @@ $RECYCLE.BIN/
 data/
 .pdm-python
 .history
+
+# Spoolman fork — local secrets and tooling
+auth_providers.yaml
+.claude/
+memory/
